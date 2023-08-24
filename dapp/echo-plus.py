@@ -76,6 +76,8 @@ def send_exception(exception):
     send_post("exception",exception)
 
 def send_post(endpoint,json_data):
+    logger.info('/voucher endpoint')
+    logger.info(json_data)
     response = requests.post(rollup_server + f"/{endpoint}", json=json_data)
     logger.info(f"/{endpoint}: Received response status {response.status_code} body {response.content}")
 
@@ -137,10 +139,16 @@ def mint_erc721_with_uri_from_image(msg_sender,erc721_to_mint,mint_header,b64out
     mint_erc721_with_string(msg_sender,erc721_to_mint,mint_header,tokenURI)
     
 def mint_erc721_with_string(msg_sender,erc721_to_mint,mint_header,string):
+    logger.info(msg_sender)
+    logger.info(erc721_to_mint)
+    logger.info(mint_header)
+    logger.info(string)
+    logger.info('mint_erc721_with_string')
     mint_header = clean_header(mint_header)
     data = encode_abi(['address', 'string'], [msg_sender,string])
     payload = f"0x{(mint_header+data).hex()}"
-    voucher = {"address": erc721_to_mint , "payload": payload}
+    voucher = {"destination": erc721_to_mint , "payload": payload}
+    # voucher = {"address": erc721_to_mint , "payload": payload}
     logger.info(f"voucher {voucher}")
     send_voucher(voucher)
     
@@ -168,12 +176,13 @@ def clean_header(mint_header):
 def handle_advance(request):
     data = request["data"]
     logger.info(f"Received advance request data")
-    # logger.info("Adding notice")
+    # logger.info(f"data, line 171: {data}")
+    logger.info(data["payload"])
     status = "accept"
     payload = None
     try:
         payload = hex2str(data["payload"])
-        logger.info(f"Received str {payload}")
+        # logger.info(f"Received str {payload}")
         if payload == "exception":
             status = "reject"
             exception = {"payload": str2hex(str(payload))}
@@ -196,6 +205,8 @@ def handle_advance(request):
         else:
             try:
                 logger.info(f"Trying to decode json")
+                logger.info(f"Trying to decode json {payload}")
+               
                 # try json data
                 json_data = json.loads(payload)
                 # check geo data
@@ -205,24 +216,30 @@ def handle_advance(request):
                     # logger.info(f"Received geo request lat,long({latitude},{longitude})")
                     # payload = f"{check_point_in_fence(latitude, longitude)}"
                     fence = json_data["fence"]
-                    logger.info(f"Received geo request fence ({fence}) lat,long({latitude},{longitude})")
+                    # logger.info(f"Received geo request fence ({fence}) lat,long({latitude},{longitude})")
                     payload = f"{check_point_in_fence(fence, latitude, longitude)}"
                 # check sql
                 elif json_data.get("sql"):
                     sql_statement = json_data["sql"]
-                    logger.info(f"Received sql statement ({sql_statement})")
+                    # logger.info(f"Received sql statement ({sql_statement})")
                     payload = f"{process_sql_statement(sql_statement)}"
                 elif json_data.get("array"):
-                    logger.info(f"Received array to sort ({json_data['array']})")
+                    # logger.info(f"Received array to sort ({json_data['array']})")
                     a = np.array(json_data["array"])
                     payload = f"{np.sort(a)}"
                 elif json_data.get("image"):
+                    # logger.info(f"image:")
+                    # logger.info(json_data)
+                    # logger.info(f"erc_to_mint:")
+                    # logger.info(json_data.get("erc721_to_mint"))
+                    # logger.info(f"selector")
+                    # logger.info(json_data.get("selector"))
                     b64out = process_image(json_data["image"].encode("utf-8"))
                     payload = f"{b64out}"
                     if json_data.get("erc721_to_mint") and json_data.get("selector"):
                         mint_erc721_with_uri_from_image(data["metadata"]["msg_sender"],json_data["erc721_to_mint"],json_data["selector"],b64out)
                 elif json_data.get("erc721_to_mint") and json_data.get("selector"):
-                    logger.info(f"Received mint request to ({json_data['erc721_to_mint']})")
+                    # logger.info(f"Received mint request to ({json_data['erc721_to_mint']})")
                     if json_data.get("string"):
                         mint_erc721_with_string(data["metadata"]["msg_sender"],json_data["erc721_to_mint"],json_data["selector"],json_data["string"])
                     else:
@@ -232,11 +249,11 @@ def handle_advance(request):
             except Exception as e2:
                 msg = f"Not valid json: {e2}"
                 traceback.print_exc()
-                logger.info(msg)
+                # logger.info(msg)
 
     except Exception as e:
         try:
-            logger.info(f"Trying to decode deposit")
+            # logger.info(f"Trying to decode deposit")
             handle_tx(data["metadata"]["msg_sender"],data["payload"])
         except Exception as e2:
             status = "reject"
@@ -252,20 +269,20 @@ def handle_advance(request):
     notice = {"payload": payload}
     send_notice(notice)
 
-    logger.info(f"Payload is {payload}")
+    # logger.info(f"Payload is {payload}")
     return status
 
 def handle_tx(sender,payload):
     binary = bytes.fromhex(payload[2:])
     input_header = decode_abi(['bytes32'], binary)[0]
-    logger.info(f"header {input_header}")
+    # logger.info(f"header {input_header}")
     voucher = None
 
     if input_header == ERC20_TRANSFER_HEADER:
         decoded = decode_abi(['bytes32', 'address', 'address', 'uint256', 'bytes'], binary)
-        logger.info(f"depositor: {decoded[1]}; erc20: {decoded[2]}; amount: {decoded[3]}; data: {decoded[4]}")
+        # logger.info(f"depositor: {decoded[1]}; erc20: {decoded[2]}; amount: {decoded[3]}; data: {decoded[4]}")
         withdraw_header = ERC20_WITHDRAWAL_HEADER[0:4]
-        logger.info(f"withdraw_header() {withdraw_header}")
+        # logger.info(f"withdraw_header() {withdraw_header}")
 
         # (address tokenAddr, address payable receiver, uint256 value)
         # data = encode_abi(['address', 'address', 'uint256'], [decoded[2],decoded[1],decoded[3]])
@@ -277,13 +294,13 @@ def handle_tx(sender,payload):
         payload = f"0x{(withdraw_header+data).hex()}"
         # payload = encode_abi(['bytes'], [withdraw_header+data])
         # payload = f"0x{payload.hex()}"
-        logger.info(f"voucher_payload(hex) {payload}")
+        # logger.info(f"voucher_payload(hex) {payload}")
         voucher = {"address": decoded[2] , "payload": payload}
-        logger.info(f"voucher {voucher}")
+        # logger.info(f"voucher {voucher}")
 
     elif input_header == ERC721_TRANSFER_HEADER:
         decoded = decode_abi(['bytes32', 'address', 'address', 'address', 'uint256', 'bytes'], binary)
-        logger.info(f"erc721: {decoded[1]}; caller: {decoded[2]}; prev owner: {decoded[3]}; nftid: {decoded[4]}; data: {decoded[5]}")
+        # logger.info(f"erc721: {decoded[1]}; caller: {decoded[2]}; prev owner: {decoded[3]}; nftid: {decoded[4]}; data: {decoded[5]}")
         withdraw_header = ERC721_SAFETRANSFER_HEADER[0:4]
         # (address sender, address payable receiver, uint256 nftId) 
         # data = encode_abi(['address', 'address', 'uint256'], [decoded[2],decoded[1],decoded[3]])
@@ -292,13 +309,13 @@ def handle_tx(sender,payload):
         data = encode_abi(['address', 'address', 'uint256'], [rollup_address,decoded[2],decoded[4]])
 
         payload = f"0x{(withdraw_header+data).hex()}"
-        logger.info(f"voucher_payload(hex) {payload}")
+        # logger.info(f"voucher_payload(hex) {payload}")
         voucher = {"address": decoded[1] , "payload": payload}
-        logger.info(f"voucher {voucher}")
+        # logger.info(f"voucher {voucher}")
 
     elif input_header == ETHER_TRANSFER_HEADER:
         decoded = decode_abi(['bytes32', 'address', 'uint256', 'bytes'], binary)
-        logger.info(f"depositor: {decoded[1]}; amount: {decoded[2]}; data: {decoded[3]}")
+        # logger.info(f"depositor: {decoded[1]}; amount: {decoded[2]}; data: {decoded[3]}")
         withdraw_header = ETHER_WITHDRAWAL_HEADER[0:4]
         # (address payable receiver, uint256 value) 
         # data = encode_abi(['address', 'uint256'], [decoded[1],decoded[2]])
@@ -308,9 +325,9 @@ def handle_tx(sender,payload):
         data2 = encode_abi(['bytes'],[data])
 
         payload = f"0x{(withdraw_header+data2).hex()}"
-        logger.info(f"voucher_payload(hex) {payload}")
+        # logger.info(f"voucher_payload(hex) {payload}")
         voucher = {"address": rollup_address , "payload": payload}
-        logger.info(f"voucher {voucher}")
+        # logger.info(f"voucher {voucher}")
 
     else:
         pass
@@ -320,8 +337,8 @@ def handle_tx(sender,payload):
 
 def handle_inspect(request):
     data = request["data"]
-    logger.info(f"Received inspect request {data}")
-    logger.info("Adding report")
+    # logger.info(f"Received inspect request {data}")
+    # logger.info("Adding report")
     report = {"payload": data["payload"]}
     send_report(report)
     return "accept"
@@ -342,13 +359,13 @@ while True:
         logger.info("No pending rollup request, trying again")
     else:
         rollup_request = response.json()
-        logger.info(f"Received rollup_request {rollup_request}")
+        # logger.info(f"Received rollup_request {rollup_request}")
         if "data" in rollup_request and "metadata" in rollup_request["data"]:
             data = rollup_request["data"]
             metadata = data["metadata"]
             if metadata["epoch_index"] == 0 and metadata["input_index"] == 0:
                 rollup_address = metadata["msg_sender"]
-                logger.info(f"Captured rollup address: {rollup_address}")
+                # logger.info(f"Captured rollup address: {rollup_address}")
                 continue
         handler = handlers[rollup_request["request_type"]]
         finish["status"] = handler(rollup_request)
