@@ -20,7 +20,7 @@ import traceback
 import json
 import sqlite3
 from eth_abi import decode_abi, encode_abi
-from shapely.geometry import shape, Point
+# from shapely.geometry import shape, Point
 import numpy as np
 import cv2
 from Cryptodome.Hash import SHA256
